@@ -315,10 +315,10 @@ func (h Header) MarshalTo(buf []byte) (n int, err error) { //nolint:cyclop
 	}
 
 	if h.Extension {
-		extHeaderPos := n
-		binary.BigEndian.PutUint16(buf[n+0:n+2], h.ExtensionProfile)
-		n += 4
-		startExtensionsPos := n
+		//extHeaderPos := n
+		//binary.BigEndian.PutUint16(buf[n+0:n+2], h.ExtensionProfile)
+		//n += 4
+		//startExtensionsPos := n
 
 		switch h.ExtensionProfile {
 		// RFC 8285 RTP One Byte Header Extension
@@ -351,17 +351,17 @@ func (h Header) MarshalTo(buf []byte) (n int, err error) { //nolint:cyclop
 		}
 
 		// calculate extensions size and round to 4 bytes boundaries
-		extSize := n - startExtensionsPos
-		roundedExtSize := ((extSize + 3) / 4) * 4
+		//extSize := n - startExtensionsPos
+		//roundedExtSize := ((extSize + 3) / 4) * 4
 
 		// nolint: gosec // G115 false positive
-		binary.BigEndian.PutUint16(buf[extHeaderPos+2:extHeaderPos+4], uint16(roundedExtSize/4))
+		//binary.BigEndian.PutUint16(buf[extHeaderPos+2:extHeaderPos+4], uint16(roundedExtSize/4))
 
 		// add padding to reach 4 bytes boundaries
-		for i := 0; i < roundedExtSize-extSize; i++ {
-			buf[n] = 0
-			n++
-		}
+		//for i := 0; i < roundedExtSize-extSize; i++ {
+		//	buf[n] = 0
+		//	n++
+		//}
 	}
 
 	return n, nil
@@ -373,7 +373,7 @@ func (h Header) MarshalSize() int {
 	size := 12 + (len(h.CSRC) * csrcLength)
 
 	if h.Extension {
-		extSize := 4
+		extSize := 0
 
 		switch h.ExtensionProfile {
 		// RFC 8285 RTP One Byte Header Extension
@@ -401,7 +401,7 @@ func (h Header) MarshalSize() int {
 
 // SetExtension sets an RTP header extension.
 func (h *Header) SetExtension(id uint8, payload []byte) error { //nolint:gocognit, cyclop
-	if h.Extension { // nolint: nestif
+	if h.Extension {                                            // nolint: nestif
 		if err := headerExtensionCheck(h.ExtensionProfile, id, payload); err != nil {
 			return err
 		}
@@ -433,6 +433,31 @@ func (h *Header) SetExtension(id uint8, payload []byte) error { //nolint:gocogni
 	h.Extensions = append(h.Extensions, Extension{id: id, payload: payload})
 
 	return nil
+}
+
+// SetExtensionWithProfile sets an RTP header extension and converts Header Extension Profile if needed.
+func (h *Header) SetExtensionWithProfile(id uint8, payload []byte, intendedProfile uint16) error {
+	if !h.Extension || h.ExtensionProfile == intendedProfile {
+		return h.SetExtension(id, payload)
+	}
+
+	// Don't mutate the packet if Set is going to fail anyway
+	if err := headerExtensionCheck(intendedProfile, id, payload); err != nil {
+		return err
+	}
+
+	// If downgrading assert that existing Extensions will work
+	if intendedProfile == ExtensionProfileOneByte {
+		for i := range h.Extensions {
+			if err := headerExtensionCheck(intendedProfile, h.Extensions[i].id, h.Extensions[i].payload); err != nil {
+				return err
+			}
+		}
+	}
+
+	h.ExtensionProfile = intendedProfile
+
+	return h.SetExtension(id, payload)
 }
 
 // GetExtensionIDs returns an extension id array.
